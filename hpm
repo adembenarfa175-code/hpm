@@ -1,0 +1,104 @@
+#!/bin/sh
+# 
+# HPM (Hybrid Package Manager) - Shell Wrapper
+# هذا السكريبت هو واجهة سطر الأوامر التي تنظم وتنادي البرنامج الأساسي المكتوب بلغة C.
+
+# متغير رئيسي: يحدد مكان ملف التجميع المكتوب بلغة C
+HPM_CORE="/usr/bin/hpm_core"
+
+# التحقق من وجود النواة (Core) المكتوبة بلغة C
+if [ ! -x "$HPM_CORE" ]; then
+    echo "Error: HPM core binary not found or not executable at $HPM_CORE."
+    echo "Please ensure the HPM C-code has been successfully compiled and installed."
+    exit 1
+fi
+
+# -----------------------------------------------------
+
+# 2. تحليل الأوامر (Argument Parsing)
+
+# استخدام 'case' لقراءة الأمر الأول ($1) وتوجيه العملية.
+
+case "$1" in
+    # -------------------
+    # الأمر الأول: hpm install <package>
+    # -------------------
+    install)
+        # التحقق من وجود اسم الحزمة المراد تثبيتها
+        if [ -z "$2" ]; then
+            echo "Error: Package name required for 'install'."
+            echo "Usage: hpm install <PackageName>"
+            exit 1
+        fi
+        
+        PACKAGE_NAME="$2"
+        
+        echo "Starting hybrid installation for '$PACKAGE_NAME'..."
+        
+        # *التفويض إلى C-Core:*
+        # يتم تمرير مهمة التثبيت الصعبة (التنزيل، التحقق، التجميع) إلى البرنامج المكتوب بلغة C.
+        "$HPM_CORE" install "$PACKAGE_NAME"
+        
+        # التحقق من رمز الخروج لـ C-Core
+        if [ $? -ne 0 ]; then
+            echo "Installation of '$PACKAGE_NAME' failed. Check hpm_core logs."
+            exit 1
+        fi
+        ;;
+        
+    # -------------------
+    # الأمر الثاني: hpm update
+    # -------------------
+    update)
+        echo "Updating local repository metadata and checking for system updates..."
+        
+        # *التفويض إلى C-Core:*
+        # مهمة تحديث النظام والملفات الوصفية تُدار بالسرعة العالية للغة C.
+        "$HPM_CORE" update_system
+        
+        if [ $? -ne 0 ]; then
+            echo "System update failed."
+            exit 1
+        fi
+        ;;
+        
+    # -------------------
+    # الأمر الثالث: hpm search <query>
+    # -------------------
+    search)
+        if [ -z "$2" ]; then
+            echo "Error: Search query required for 'search'."
+            exit 1
+        fi
+        QUERY="$2"
+        
+        # *التفويض إلى C-Core:*
+        # البحث في قاعدة بيانات الحزم يتم تنفيذه بواسطة C للسرعة.
+        "$HPM_CORE" search_repo "$QUERY"
+        ;;
+        
+    # -------------------
+    # الأوامر المساعدة
+    # -------------------
+    help)
+        echo "HPM (Hybrid Package Manager) v1.0"
+        echo "Usage: hpm <command> [arguments]"
+        echo ""
+        echo "Core Commands:"
+        echo "  install <package>  - Download and install a package (binary or source)."
+        echo "  update             - Update repository metadata and upgrade installed packages."
+        echo "  search <query>     - Search the repository for packages."
+        ;;
+        
+    # -------------------
+    # أمر غير معروف
+    # -------------------
+    *)
+        echo "Error: Unknown command '$1'."
+        echo "Run 'hpm help' for usage information."
+        exit 1
+        ;;
+esac
+
+exit 0
+

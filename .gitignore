@@ -1,0 +1,9 @@
+# ملفات البناء
+*.o
+hpm_core
+
+# مجلدات وادوات مؤقتة
+hpm_package_template/
+start_repo.sh
+/tmp/hpm_downloads/
+/tmp/hpm_build/
