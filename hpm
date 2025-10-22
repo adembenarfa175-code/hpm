@@ -1,104 +1,176 @@
-#!/bin/sh
-# 
-# HPM (Hybrid Package Manager) - Shell Wrapper
-# هذا السكريبت هو واجهة سطر الأوامر التي تنظم وتنادي البرنامج الأساسي المكتوب بلغة C.
+#!/bin/bash
+# HPM: Hybrid Package Manager - Command Line Interface (CLI)
+# Version: 1.0 (Build System Integration)
+# License: GPLv2
 
-# متغير رئيسي: يحدد مكان ملف التجميع المكتوب بلغة C
-HPM_CORE="/usr/bin/hpm_core"
+# =======================================================
+# 1. إعدادات المسارات والمتغيرات
+# =======================================================
+HPM_PATH="$(dirname "$(readlink -f "$0")")"
+REPO_BASE_URL="http://localhost:8080"
 
-# التحقق من وجود النواة (Core) المكتوبة بلغة C
-if [ ! -x "$HPM_CORE" ]; then
-    echo "Error: HPM core binary not found or not executable at $HPM_CORE."
-    echo "Please ensure the HPM C-code has been successfully compiled and installed."
+# المسارات المؤقتة (يجب أن تكون في /tmp لضمان التنظيف)
+DOWNLOAD_DIR="/tmp/hpm_downloads"
+BUILD_DIR="/tmp/hpm_build"
+
+# التحقق من وجود الأدوات الأساسية
+if [ ! -f "$HPM_PATH/hpm_driver" ]; then
+    echo "ERROR: hpm_driver (C-Core) binary not found."
+    echo "Please run 'make' first to compile hpm_file_driver.c."
     exit 1
 fi
 
-# -----------------------------------------------------
+# =======================================================
+# 2. الشعار ووظائف العرض
+# =======================================================
+function hpm_banner() {
+    echo ""
+    echo "█▀▀ █ █ █▀▄ █▀█"
+    echo "█▄▄ █▄█ █▄▀ █▀▄"
+    echo "------------------------------------"
+    echo "HPM C-Core Workflow: Starting for: $1"
+    echo "------------------------------------"
+}
 
-# 2. تحليل الأوامر (Argument Parsing)
+function hpm_usage() {
+    echo "HPM: Hybrid Package Manager"
+    echo "License: GPLv2"
+    echo ""
+    echo "Usage: ./hpm <command> [options]"
+    echo ""
+    echo "Commands:"
+    echo "  install <PackageName>    Download, build, and install a package."
+    echo "  buildsystem              Start the full HPM Linux distribution build process (requires sudo)."
+    echo ""
+}
 
-# استخدام 'case' لقراءة الأمر الأول ($1) وتوجيه العملية.
+# =======================================================
+# 3. وظيفة التنظيف (Cleanup)
+# =======================================================
+function hpm_cleanup() {
+    local package_path="$1"
+    local build_path="$2"
+    local cleanup_status=0
 
+    echo "[HPM Cleanup] Starting temporary files cleanup..."
+
+    if [ -f "$package_path" ]; then
+        rm -f "$package_path"
+        echo "  [OK] Removed downloaded package: $package_path"
+    fi
+
+    if [ -d "$build_path" ]; then
+        rm -rf "$build_path"
+        echo "  [OK] Removed extraction directory: $build_path"
+    fi
+    
+    return $cleanup_status
+}
+
+# =======================================================
+# 4. وظيفة التثبيت الأساسية
+# =======================================================
+function hpm_install() {
+    local package_name="$1"
+    
+    if [ -z "$package_name" ]; then
+        echo "Error: Package name is required."
+        hpm_usage
+        return 1
+    fi
+
+    hpm_banner "$package_name"
+    
+    local package_url="$REPO_BASE_URL/$package_name.hpm"
+    local local_path="$DOWNLOAD_DIR/$package_name.hpm"
+    local exit_status=0
+
+    # 1. التنزيل الصامت باستخدام wget -q
+    echo "[hpm:1] Downloading $package_name from $package_url"
+    mkdir -p "$DOWNLOAD_DIR"
+    
+    # تنفيذ wget -q (التحميل الصامت)
+    wget -q "$package_url" -O "$local_path"
+    exit_status=$?
+
+    if [ $exit_status -eq 0 ]; then
+        echo "[hpm:2] OK: Download successful to $local_path"
+    else
+        echo "[hpm:2] ERROR: Failed to download package (Wget Status: $exit_status)."
+        hpm_cleanup "$local_path" "$BUILD_DIR"
+        return 1
+    fi
+
+    # 2. فك الضغط والتجميع والتثبيت بواسطة hpm_driver
+    echo "[HPM Driver] Invoking C-based driver for build and install..."
+    
+    # نمرر مسار الحزمة المحلية ومسار البناء
+    "$HPM_PATH/hpm_driver" "$local_path" "$BUILD_DIR"
+    exit_status=$?
+
+    if [ $exit_status -eq 0 ]; then
+        echo "------------------------------------"
+        echo "✅ Package '$package_name' installed successfully."
+        echo "------------------------------------"
+    else
+        echo "------------------------------------"
+        echo "🛑 Installation of '$package_name' FAILED (Driver Status: $exit_status)."
+        echo "------------------------------------"
+    fi
+
+    # 3. التنظيف النهائي (يحدث سواء نجح التثبيت أو فشل)
+    hpm_cleanup "$local_path" "$BUILD_DIR"
+    return $exit_status
+}
+
+# =======================================================
+# 5. وظيفة بناء نظام HPM (Chroot Build System)
+# =======================================================
+function hpm_buildsystem() {
+    echo "--- HPM Distribution Build System Setup ---"
+    
+    # يجب أن يكون السكريبت build.sh جاهزاً وقابلاً للتنفيذ
+    if [ ! -f "$HPM_PATH/build-system/build.sh" ]; then
+        echo "ERROR: Build system script is missing or not configured."
+        echo "Please ensure $HPM_PATH/build-system/build.sh exists."
+        return 1
+    fi
+
+    if [[ $EUID -ne 0 ]]; then
+       echo "--------------------------------------------------------"
+       echo "🛑 ERROR: Build System requires root permissions for chroot."
+       echo "   Please run this command with 'sudo'."
+       echo "--------------------------------------------------------"
+       return 1
+    fi
+
+    # تنفيذ سكريبت البناء الرئيسي (الذي سيقوم بالـ chroot و mount)
+    echo "Starting full system build via build-system/build.sh..."
+    bash "$HPM_PATH/build-system/build.sh"
+    
+    local build_status=$?
+    
+    if [ $build_status -eq 0 ]; then
+        echo "✅ HPM Distribution built successfully."
+    else
+        echo "🛑 HPM Distribution build FAILED."
+    fi
+    
+    return $build_status
+}
+
+# =======================================================
+# 6. معالج الأوامر الرئيسية (CLI Entry Point)
+# =======================================================
 case "$1" in
-    # -------------------
-    # الأمر الأول: hpm install <package>
-    # -------------------
     install)
-        # التحقق من وجود اسم الحزمة المراد تثبيتها
-        if [ -z "$2" ]; then
-            echo "Error: Package name required for 'install'."
-            echo "Usage: hpm install <PackageName>"
-            exit 1
-        fi
-        
-        PACKAGE_NAME="$2"
-        
-        echo "Starting hybrid installation for '$PACKAGE_NAME'..."
-        
-        # *التفويض إلى C-Core:*
-        # يتم تمرير مهمة التثبيت الصعبة (التنزيل، التحقق، التجميع) إلى البرنامج المكتوب بلغة C.
-        "$HPM_CORE" install "$PACKAGE_NAME"
-        
-        # التحقق من رمز الخروج لـ C-Core
-        if [ $? -ne 0 ]; then
-            echo "Installation of '$PACKAGE_NAME' failed. Check hpm_core logs."
-            exit 1
-        fi
+        hpm_install "$2"
         ;;
-        
-    # -------------------
-    # الأمر الثاني: hpm update
-    # -------------------
-    update)
-        echo "Updating local repository metadata and checking for system updates..."
-        
-        # *التفويض إلى C-Core:*
-        # مهمة تحديث النظام والملفات الوصفية تُدار بالسرعة العالية للغة C.
-        "$HPM_CORE" update_system
-        
-        if [ $? -ne 0 ]; then
-            echo "System update failed."
-            exit 1
-        fi
+    buildsystem)
+        hpm_buildsystem
         ;;
-        
-    # -------------------
-    # الأمر الثالث: hpm search <query>
-    # -------------------
-    search)
-        if [ -z "$2" ]; then
-            echo "Error: Search query required for 'search'."
-            exit 1
-        fi
-        QUERY="$2"
-        
-        # *التفويض إلى C-Core:*
-        # البحث في قاعدة بيانات الحزم يتم تنفيذه بواسطة C للسرعة.
-        "$HPM_CORE" search_repo "$QUERY"
-        ;;
-        
-    # -------------------
-    # الأوامر المساعدة
-    # -------------------
-    help)
-        echo "HPM (Hybrid Package Manager) v1.0"
-        echo "Usage: hpm <command> [arguments]"
-        echo ""
-        echo "Core Commands:"
-        echo "  install <package>  - Download and install a package (binary or source)."
-        echo "  update             - Update repository metadata and upgrade installed packages."
-        echo "  search <query>     - Search the repository for packages."
-        ;;
-        
-    # -------------------
-    # أمر غير معروف
-    # -------------------
     *)
-        echo "Error: Unknown command '$1'."
-        echo "Run 'hpm help' for usage information."
-        exit 1
+        hpm_usage
         ;;
 esac
-
-exit 0
 

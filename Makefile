@@ -1,43 +1,32 @@
+# =======================================================
+# Makefile لمشروع HPM
 #
-# Makefile for HPM (Hybrid Package Manager) C-Core
-#
+# الأهداف: all, clean, driver, setup
+# =======================================================
 
-# المترجم (Compiler)
 CC = gcc
+CFLAGS = -Wall -Wextra
+TARGET_DRIVER = hpm_driver
+SOURCE_DRIVER = hpm_file_driver.c
 
-# خيارات المترجم (تضمين التحذيرات ومعيار C99)
-CFLAGS = -Wall -Werror -std=c99 -g
+# الهدف الرئيسي: تجميع كل شيء (المشغل C)
+all: $(TARGET_DRIVER)
 
-# اسم الملف التنفيذي النهائي
-TARGET = hpm_core
+# الهدف: تجميع مشغل C (hpm_driver)
+$(TARGET_DRIVER): $(SOURCE_DRIVER)
+	$(CC) $(CFLAGS) -o $(TARGET_DRIVER) $(SOURCE_DRIVER)
+	@echo "✅ C Driver ($(TARGET_DRIVER)) built successfully."
 
-# قائمة بالملفات المصدرية (Source Files)
-SRC = hpm_core.c hpm_file_driver.c
+# الهدف: إعداد الصلاحيات للسكريبتات
+setup: $(TARGET_DRIVER)
+	chmod +x hpm
+	chmod +x start_repo.sh
+	@echo "✅ Permissions set for hpm and start_repo.sh."
 
-# قائمة بملفات الأغراض (*.o)
-OBJ = $(SRC:.c=.o)
-
-# -----------------------------------------------------
-# الأهداف الرئيسية (Compilation)
-# -----------------------------------------------------
-
-# الهدف الافتراضي: بناء hpm_core
-all: $(TARGET)
-
-# قاعدة بناء الملف التنفيذي
-$(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) $(OBJ) -o $(TARGET)
-
-# قاعدة بناء ملفات الأغراض (قاعدة ضمنية)
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-# -----------------------------------------------------
-# أهداف الإدارة
-# -----------------------------------------------------
-
-# هدف التنظيف: حذف الملفات المؤقتة والملف التنفيذي
-.PHONY: clean
+# الهدف: تنظيف الملفات الثنائية المُجمَّعة فقط
 clean:
-	rm -f $(OBJ) $(TARGET)
+	rm -f $(TARGET_DRIVER)
+	@echo "🧹 Cleaned built files: $(TARGET_DRIVER)"
+
+.PHONY: all clean setup
 
